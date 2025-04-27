@@ -1,6 +1,63 @@
 import type { NextRequest } from "next/server"
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager'
 
 export const runtime = "edge"
+
+// Secret Managerクライアントの初期化 (一度だけ実行される)
+// Edge Runtimeではトップレベルでの非同期処理や一部Node.js APIが使えないため注意
+// この初期化方法はNode.jsランタイム向け。Edgeでは環境変数経由が基本。
+// Edge RuntimeでSecret Managerを直接利用するのは推奨されないことが多い。
+// 代替案: Cloud Build時にSecretをビルド時環境変数として注入するか、
+// またはNode.jsランタイムを使用する。
+// ここでは、一旦環境変数で渡される前提で進めます。
+// let secretManagerClient: SecretManagerServiceClient | null = null;
+// if (process.env.NODE_ENV !== 'development' && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+//   try {
+//      console.log("Initializing Secret Manager Client for production...");
+//      secretManagerClient = new SecretManagerServiceClient();
+//   } catch (e) {
+//      console.error("Failed to initialize Secret Manager Client:", e);
+//   }
+// }
+
+async function getApiKey(): Promise<string> {
+  // 1. 環境変数から直接取得を試みる (ローカル開発 or ビルド時に注入された場合)
+  const apiKeyFromEnv = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (apiKeyFromEnv) {
+    console.log("API Key found in environment variables.");
+    return apiKeyFromEnv;
+  }
+
+  // 2. Secret Managerから取得 (Node.jsランタイムの場合 - Edgeでは通常動作しない)
+  // Edge Runtime で Secret Manager を使いたい場合、別途工夫が必要（例: 中継API）
+  // 今回はEdge Runtimeのため、この部分はコメントアウトし、環境変数がない場合はエラーとする
+  /*
+  if (secretManagerClient && process.env.GCP_PROJECT_ID) {
+    console.log("Attempting to fetch API Key from Secret Manager...");
+    const secretName = `projects/${process.env.GCP_PROJECT_ID}/secrets/GOOGLE_GENERATIVE_AI_API_KEY/versions/latest`;
+    try {
+      const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
+      const apiKey = version.payload?.data?.toString();
+      if (apiKey) {
+        console.log("API Key successfully fetched from Secret Manager.");
+        return apiKey;
+      } else {
+        console.error("Secret Manager returned an empty payload.");
+      }
+    } catch (error) {
+      console.error(`Error accessing secret version ${secretName}:`, error);
+    }
+  } else {
+    if (process.env.NODE_ENV !== 'development') {
+      console.log("Secret Manager client not initialized or GCP_PROJECT_ID not set.");
+    }
+  }
+  */
+
+  // 3. どちらの方法でも取得できなかった場合
+  console.error("Google Generative AI API キーが設定されていません。環境変数またはSecret Managerを確認してください。");
+  throw new Error("API キーが設定されていません");
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,11 +67,12 @@ export async function POST(req: NextRequest) {
       return new Response("製品アイデアが必要です", { status: 400 })
     }
 
-    // API キー
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-    if (!apiKey) {
-      console.error("Google Generative AI API キーが設定されていません")
-      return new Response("API キーが設定されていません", { status: 500 })
+    // API キーを取得
+    let apiKey: string;
+    try {
+      apiKey = await getApiKey();
+    } catch (error: any) {
+      return new Response(error.message, { status: 500 });
     }
 
     // 最もシンプルな形式でAPIを呼び出す
