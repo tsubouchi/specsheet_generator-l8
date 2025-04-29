@@ -39,10 +39,9 @@ RUN pnpm build
 FROM base AS runner
 WORKDIR /app
 
-# 環境設定
-ENV NODE_ENV production
-# ポート番号 (Cloud Run はデフォルトで 8080 を想定)
-ENV PORT 8080
+# 環境設定 & ポート番号 (Cloud Run はデフォルトで 8080)
+ENV NODE_ENV=production \
+    PORT=8080
 
 # 必要なユーザー/グループを作成 (セキュリティ強化)
 RUN addgroup --system --gid 1001 nodejs

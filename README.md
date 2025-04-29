@@ -8,7 +8,7 @@ Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイさ
 -   **フロントエンド**: Next.js (React), TypeScript, Tailwind CSS
 -   **バックエンド (API)**: Next.js API Routes (Serverless on Cloud Run)
 -   **認証**: Firebase Authentication (Google OAuth 2.0)
--   **ホスティング**: Cloud Run (Next.js + API, min-instances=0 でスケールダウン可)
+-   **ホスティング**: Cloud Run (Next.js + API, min-instances=1 でコールドスタートを回避)
 -   **データベース**: (現時点ではなし、必要に応じて Firestore 等を追加)
 -   **インフラ**: Google Cloud Platform
     -   Cloud Run: バックエンドAPIの実行環境
@@ -84,6 +84,11 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
     -   (必要に応じて) 承認済みドメインにデプロイ先のドメインを追加します。
 4.  **Hosting**: 今回は Firebase Hosting を使用せず、Cloud Run に統合デプロイするためスキップします。
 
+## 追加メモ (2025-04-30)
+
+- Firebase CLI v14 以降を使用する場合は **Node.js 20 以上** が必要です。
+- SDK Config の6項目 (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) は Secret Manager に登録し、Cloud Build で `secretEnv` として参照します。
+
 ## ローカル開発
 
 1.  リポジトリをクローンします。
@@ -115,9 +120,18 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
     -   (詳細は `cloudbuild.yaml` 作成時に追記)
 2.  **フロントエンド / バックエンド (Cloud Run)**:
     -   `gcloud builds submit --config cloudbuild.yaml` で Cloud Build を実行します。
-    -   `gcloud run deploy specsheet-generator --image asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator --min-instances=0 --platform=managed --region=asia-northeast1` などで Cloud Run にデプロイします。
-    -   **min-instances=0** を指定することで、コールドスタート時にインスタンスを 0 にスケールダウンできます (課金最小化)。
+    -   `gcloud run deploy specsheet-generator --image asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator --min-instances=1 --platform=managed --region=asia-northeast1` などで Cloud Run にデプロイします。
+    -   **min-instances=1** を指定することで、常時 1 つのインスタンスを維持し、コールドスタートを回避します (若干のランニングコストが発生)。
+
+### 本番 URL
+
+https://specsheet-generator-503166429433.asia-northeast1.run.app
 
 ## TODO
 
 詳細は `TODO.md` を参照してください。
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"productIdea":"リアルタイム翻訳チャットボット"}' \
+  https://specsheet-generator-503166429433.asia-northeast1.run.app/api/generate

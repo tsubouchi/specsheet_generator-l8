@@ -7,7 +7,7 @@
 -   [x] Secret Manager への Gemini API キー登録
 -   [ ] Firebase Authentication の設定 (Google プロバイダー有効化)
 -   [ ] Firebase Hosting の設定 (`firebase init`, `firebase use`)
--   [ ] Firebase プロジェクト設定から `firebaseConfig` を取得し `.env.local` に設定
+-   [x] Firebase プロジェクト設定から `firebaseConfig` を Secret Manager に登録
 -   [ ] Cloud Run サービスアカウント作成と Secret Manager アクセス権限付与
 
 ## ドキュメント
@@ -47,9 +47,9 @@
 
 ## テスト・調整
 
--   [ ] ローカル環境での動作確認 (ログイン、仕様書生成)
--   [ ] デプロイ環境での動作確認
+-   [x] ローカル環境での動作確認 (ログイン、仕様書生成)
+-   [x] デプロイ環境での動作確認
 -   [ ] エラーハンドリングの見直し
 -   [ ] パフォーマンスチューニング (必要に応じて)
--   [x] Cloud Run min-instances=0 設定確認 - CI テスト : 2025年 4月29日 火曜日 12時18分36秒 JST
+-   [x] Cloud Run min-instances=1 設定確認 - CI テスト : 2025年 4月30日 水曜日 09時00分00秒 JST
 - CI テスト : 2025年 4月29日 火曜日 12時20分22秒 JST
