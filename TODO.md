@@ -37,18 +37,18 @@
 
 ## デプロイ設定
 
--   [ ] `Dockerfile` 作成 (Cloud Run 用)
--   [ ] `cloudbuild.yaml` 作成 (CI/CD パイプライン定義)
-    -   [ ] 依存関係インストールステップ
-    -   [ ] フロントエンドビルドステップ
-    -   [ ] バックエンド Docker イメージビルド＆プッシュステップ
-    -   [ ] Cloud Run デプロイステップ (Secret Manager 連携含む)
-    -   [ ] Firebase Hosting デプロイステップ
--   [ ] Cloud Build トリガー設定 (GitHub リポジトリ連携)
+-   [x] `Dockerfile` 作成 (Cloud Run 用)
+-   [x] `cloudbuild.yaml` 作成 (CI/CD パイプライン定義)
+    -   [x] 依存関係インストールステップ
+    -   [x] フロントエンドビルドステップ
+    -   [x] バックエンド Docker イメージビルド＆プッシュステップ
+    -   [x] Cloud Run デプロイステップ (Secret Manager 連携含む)
+-   [x] Cloud Build トリガー設定 (GitHub リポジトリ連携) 2025-04-29 完了
 
 ## テスト・調整
 
 -   [ ] ローカル環境での動作確認 (ログイン、仕様書生成)
 -   [ ] デプロイ環境での動作確認
 -   [ ] エラーハンドリングの見直し
--   [ ] パフォーマンスチューニング (必要に応じて) 
+-   [ ] パフォーマンスチューニング (必要に応じて)
+-   [x] Cloud Run min-instances=0 設定確認 - CI テスト : 2025年 4月29日 火曜日 12時18分36秒 JST
