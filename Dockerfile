@@ -28,12 +28,8 @@ COPY . .
 # .env.local がビルド時に存在しないようにする (必要な変数はビルド引数やCloud Buildで渡す)
 # COPY .env.local ./.env.local
 
-# Next.js アプリケーションのビルド
-# ビルド時に公開環境変数が必要な場合は ARG と ENV で渡す
-# ARG NEXT_PUBLIC_FIREBASE_API_KEY
-# ENV NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY
-# ... 他の NEXT_PUBLIC_* 変数も同様
-RUN pnpm build
+# ※既に Cloud Build ステップで Next.js ビルド済みのため、ここでは再ビルドしない
+#   .next ディレクトリはビルドコンテキストに含まれるので、そのままコピーして利用する
 
 # 4. Runner Stage (Final Image)
 FROM base AS runner
