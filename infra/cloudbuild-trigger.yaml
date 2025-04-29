@@ -1,0 +1,14 @@
+apiVersion: cloudbuild.googleapis.com/v1
+kind: BuildTrigger
+metadata:
+  name: specsheet-generator-ci
+spec:
+  description: "CI/CD: Build & Deploy on push to main"
+  source:
+    github:
+      owner: tsubouchi
+      name: specsheet_generator-l8
+      push:
+        branch: '^main$'
+  build:
+    filename: cloudbuild.yaml 

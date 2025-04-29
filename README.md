@@ -8,7 +8,7 @@ Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイさ
 -   **フロントエンド**: Next.js (React), TypeScript, Tailwind CSS
 -   **バックエンド (API)**: Next.js API Routes (Serverless on Cloud Run)
 -   **認証**: Firebase Authentication (Google OAuth 2.0)
--   **ホスティング**: Firebase Hosting
+-   **ホスティング**: Cloud Run (Next.js + API, min-instances=0 でスケールダウン可)
 -   **データベース**: (現時点ではなし、必要に応じて Firestore 等を追加)
 -   **インフラ**: Google Cloud Platform
     -   Cloud Run: バックエンドAPIの実行環境
@@ -58,10 +58,6 @@ gcloud projects add-iam-policy-binding specsheet-generator \
 
 gcloud projects add-iam-policy-binding specsheet-generator \
     --member="user:t@bonginkan.ai" \
-    --role="roles/firebasehosting.admin"
-
-gcloud projects add-iam-policy-binding specsheet-generator \
-    --member="user:t@bonginkan.ai" \
     --role="roles/cloudbuild.builds.editor"
 ```
 
@@ -86,18 +82,7 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
     -   「Sign-in method」タブを開きます。
     -   「Google」プロバイダーを有効にし、サポートメールアドレスを選択します。
     -   (必要に応じて) 承認済みドメインにデプロイ先のドメインを追加します。
-4.  **Hosting**:
-    -   Hosting を開始します。
-    -   `firebase login` コマンドで Firebase CLI にログインします。
-    -   `firebase init hosting` を実行し、設定を行います。
-        -   Public directory: `out` (Next.js の静的エクスポート先) または デフォルトの `public` (動的ホスティングの場合) を選択。 (※後述のデプロイ戦略に依存)
-        -   Configure as a single-page app: `Yes`
-        -   Set up automatic builds and deploys with GitHub?: `No` (Cloud Build を使用するため)
-    -   `firebase use specsheet-generator` で対象プロジェクトを選択します。
-5.  **プロジェクト設定**:
-    -   「プロジェクトの設定」>「全般」タブを開きます。
-    -   「マイアプリ」セクションでウェブアプリを選択 (または新規作成) します。
-    -   **Firebase SDK snippet** の **`firebaseConfig`** オブジェクトの内容をコピーし、後述のフロントエンド設定で使用します。(`apiKey` などが含まれています)
+4.  **Hosting**: 今回は Firebase Hosting を使用せず、Cloud Run に統合デプロイするためスキップします。
 
 ## ローカル開発
 
@@ -121,16 +106,17 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
 
 ## デプロイ
 
-デプロイは Cloud Build を使用して自動化されます (設定は `cloudbuild.yaml` に記述予定)。
+デプロイは Cloud Build を使用して自動化されます (設定は `cloudbuild.yaml` )。GitHub リポジトリと Cloud Build トリガーを連携すると、`main` ブランチへの push で自動ビルド＆デプロイが走ります。
 手動でデプロイする場合:
 
 1.  **バックエンド (Cloud Run)**:
     -   `Dockerfile` を使用してコンテナイメージをビルドします。
     -   `gcloud run deploy` コマンドで Cloud Run にデプロイします。Secret Manager から API キーを読み込むように設定します。
     -   (詳細は `cloudbuild.yaml` 作成時に追記)
-2.  **フロントエンド (Firebase Hosting)**:
-    -   `pnpm run build` で Next.js アプリケーションをビルドします。
-    -   `firebase deploy --only hosting` コマンドで Firebase Hosting にデプロイします。
+2.  **フロントエンド / バックエンド (Cloud Run)**:
+    -   `gcloud builds submit --config cloudbuild.yaml` で Cloud Build を実行します。
+    -   `gcloud run deploy specsheet-generator --image asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator --min-instances=0 --platform=managed --region=asia-northeast1` などで Cloud Run にデプロイします。
+    -   **min-instances=0** を指定することで、コールドスタート時にインスタンスを 0 にスケールダウンできます (課金最小化)。
 
 ## TODO
 

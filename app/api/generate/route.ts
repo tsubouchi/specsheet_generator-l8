@@ -3,6 +3,13 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager'
 
 export const runtime = "edge"
 
+// === CORS 共通ヘッダ ===
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": process.env.CORS_ALLOW_ORIGIN ?? "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+}
+
 // Secret Managerクライアントの初期化 (一度だけ実行される)
 // Edge Runtimeではトップレベルでの非同期処理や一部Node.js APIが使えないため注意
 // この初期化方法はNode.jsランタイム向け。Edgeでは環境変数経由が基本。
@@ -59,12 +66,17 @@ async function getApiKey(): Promise<string> {
   throw new Error("API キーが設定されていません");
 }
 
+// OPTIONS プリフライトリクエスト用ハンドラ
+export function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { productIdea } = await req.json()
 
     if (!productIdea || typeof productIdea !== "string") {
-      return new Response("製品アイデアが必要です", { status: 400 })
+      return new Response("製品アイデアが必要です", { status: 400, headers: CORS_HEADERS })
     }
 
     // API キーを取得
@@ -72,7 +84,7 @@ export async function POST(req: NextRequest) {
     try {
       apiKey = await getApiKey();
     } catch (error: any) {
-      return new Response(error.message, { status: 500 });
+      return new Response(error.message, { status: 500, headers: CORS_HEADERS });
     }
 
     // 最もシンプルな形式でAPIを呼び出す
@@ -103,7 +115,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text()
       console.error("Gemini API 応答エラー:", response.status, errorText)
-      return new Response(`Gemini API エラー: ${response.status} ${errorText}`, { status: response.status })
+      return new Response(`Gemini API エラー: ${response.status} ${errorText}`, { status: response.status, headers: CORS_HEADERS })
     }
 
     const data = await response.json()
@@ -112,11 +124,12 @@ export async function POST(req: NextRequest) {
     return new Response(generatedText, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
+        ...CORS_HEADERS,
       },
     })
   } catch (err: any) {
     console.error("仕様書生成エラー:", err)
-    return new Response(`仕様書の生成中にエラーが発生しました: ${err.message ?? "不明なエラー"}`, { status: 500 })
+    return new Response(`仕様書の生成中にエラーが発生しました: ${err.message ?? "不明なエラー"}`, { status: 500, headers: CORS_HEADERS })
   }
 }
 

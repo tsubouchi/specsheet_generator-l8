@@ -17,8 +17,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ja">
       <body className={inter.className}>
         <AuthProvider>
-          {children}
-          <Toaster />
+        {children}
+        <Toaster />
         </AuthProvider>
       </body>
     </html>

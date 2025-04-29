@@ -20,58 +20,31 @@ steps:
     id: build-app
     waitFor: ['install-deps']
 
-  # 3. Build Docker image for Cloud Run
-  - name: 'gcr.io/cloud-builders/docker'
+  # 3. Build Docker image for the Next.js app
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
     args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/specsheet-api:$COMMIT_SHA' # Tag with commit SHA
-      - '.' # Build context is the root directory
-      - '-f'
-      - 'Dockerfile' # Specify the Dockerfile
-    id: build-docker-image
-    waitFor: ['build-app']
+      - "-c"
+      - |
+        docker build -t asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$SHORT_SHA .
 
-  # 4. Push Docker image to Google Container Registry (GCR)
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/specsheet-api:$COMMIT_SHA']
-    id: push-docker-image
-    waitFor: ['build-docker-image']
+  # 4. Push the image to Artifact Registry / Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$SHORT_SHA"]
 
-  # 5. Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+  # 5. Deploy to Cloud Run (managed)
+  - name: "gcr.io/cloud-builders/gcloud"
     args:
-      - 'run'
-      - 'deploy'
-      - 'specsheet-api' # Cloud Run service name
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/specsheet-api:$COMMIT_SHA'
-      - '--region'
-      - 'asia-northeast1' # Specify your desired region
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated' # Allow public access, adjust if needed
-      - '--set-secrets=GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest' # Mount secret as environment variable
-      - '--project=$PROJECT_ID'
-    id: deploy-cloud-run
-    waitFor: ['push-docker-image']
-
-  # 6. Deploy to Firebase Hosting
-  - name: 'gcr.io/cloud-builders/npm' # npm is included, use it to run firebase-tools
-    entrypoint: npx
-    args:
-      - '-p'
-      - 'firebase-tools' # Install firebase-tools temporarily
-      - 'firebase'
-      - 'deploy'
-      - '--only'
-      - 'hosting'
-      - '--project=$PROJECT_ID' # Use GCP Project ID which is linked to Firebase
-      - '--token=$FIREBASE_TOKEN' # Use Firebase token stored in Secret Manager
-    secretEnv: ['FIREBASE_TOKEN']
-    id: deploy-firebase-hosting
-    waitFor: ['build-app'] # Depends only on the build step
+      - "run"
+      - "deploy"
+      - "specsheet-generator"
+      - "--image=asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$SHORT_SHA"
+      - "--region=asia-northeast1"
+      - "--platform=managed"
+      - "--min-instances=0"
+      - "--allow-unauthenticated"
+      - "--set-secrets=GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest"
+      - "--update-env-vars=CORS_ALLOW_ORIGIN=https://your-frontend-domain.com"
 
 # Define available secrets from Secret Manager
 availableSecrets:
@@ -96,7 +69,7 @@ availableSecrets:
 
 # Tag images with commit SHA for traceability
 images:
-  - 'gcr.io/$PROJECT_ID/specsheet-api:$COMMIT_SHA'
+  - "asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$SHORT_SHA"
 
 # Timeout for the entire build
 timeout: '1200s' # 20 minutes
