@@ -8,7 +8,7 @@
 -   [ ] Firebase Authentication の設定 (Google プロバイダー有効化)
 -   [ ] Firebase Hosting の設定 (`firebase init`, `firebase use`)
 -   [x] Firebase プロジェクト設定から `firebaseConfig` を Secret Manager に登録
--   [ ] Cloud Run サービスアカウント作成と Secret Manager アクセス権限付与
+-   [x] Cloud Run サービスアカウント作成と Secret Manager アクセス権限付与 - 2025-04-30 完了
 
 ## ドキュメント
 
