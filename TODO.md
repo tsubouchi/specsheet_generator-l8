@@ -9,6 +9,8 @@
 -   [ ] Firebase Hosting の設定 (`firebase init`, `firebase use`)
 -   [x] Firebase プロジェクト設定から `firebaseConfig` を Secret Manager に登録
 -   [x] Cloud Run サービスアカウント作成と Secret Manager アクセス権限付与 - 2025-04-30 完了
+-   [x] Compute SA への IAM 権限付与 (Storage, Secret Manager, Logging, Artifact Registry) - 2025-04-30 完了
+-   [x] Dockerfile 修正 (依存関係フルインストール & Telemetry 無効化) - 2025-04-30 完了
 
 ## ドキュメント
 

@@ -88,6 +88,7 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
 
 - Firebase CLI v14 以降を使用する場合は **Node.js 20 以上** が必要です。
 - SDK Config の6項目 (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) は Secret Manager に登録し、Cloud Build で `secretEnv` として参照します。
+- Cloud Build で Compute Engine 既定 SA を使用する場合は、Storage/Secret Manager/Logging/Artifact Registry への権限付与が必要です。
 
 ## ローカル開発
 
