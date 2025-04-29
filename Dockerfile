@@ -13,8 +13,8 @@ WORKDIR /app
 # package.json と pnpm-lock.yaml をコピー
 COPY package.json pnpm-lock.yaml ./
 
-# 依存関係のインストール (本番用のみ)
-RUN pnpm install --prod --frozen-lockfile
+# 依存関係のインストール (開発 + 本番)
+RUN pnpm install --frozen-lockfile
 
 # 3. Build Stage
 FROM base AS builder
@@ -41,7 +41,8 @@ WORKDIR /app
 
 # 環境設定 & ポート番号 (Cloud Run はデフォルトで 8080)
 ENV NODE_ENV=production \
-    PORT=8080
+    PORT=8080 \
+    NEXT_TELEMETRY_DISABLED=1
 
 # 必要なユーザー/グループを作成 (セキュリティ強化)
 RUN addgroup --system --gid 1001 nodejs
