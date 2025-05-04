@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "result": [
+    {
+      "name": "projects/specsheet-generator/webApps/1:503166429433:web:359179414d605cc91eda28",
+      "displayName": "specsheet-generator",
+      "platform": "WEB",
+      "appId": "1:503166429433:web:359179414d605cc91eda28",
+      "namespace": "ZGNkMzg1MTItYmFlMy00MWU0LWExNDYtYTU1NzY5NjkwMjgw",
+      "apiKeyId": "1d50428d-cc61-4371-b81b-a2635f2c779e",
+      "state": "ACTIVE",
+      "expireTime": "1970-01-01T00:00:00Z"
+    }
+  ]
+}

@@ -1,100 +1,69 @@
-# cloudbuild.yaml
 steps:
-  # 0. Install pnpm (if not available in the build environment)
-  - name: 'node:20' # Use a Node.js image that has npm
-    entrypoint: npm
-    args: ['install', '-g', 'pnpm']
-
-  # 1. Install Dependencies
-  - name: 'node:20' # Use the same Node.js version as Dockerfile base
-    entrypoint: bash
-    args: 
-      - -c
-      - |
-        npm install -g pnpm && \
-        pnpm install --frozen-lockfile
-    id: install-deps
-
-  # 2. Build Next.js App (Frontend & Backend API)
-  # Pass Firebase config as build-time environment variables
-  - name: 'node:20'
-    entrypoint: bash
-    args: 
-      - -c
-      - |
-        npm install -g pnpm && \
-        pnpm run build
+  # Dockerイメージビルド - ビルド中に環境変数を渡す
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', 
+      '-t', 'asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:latest', 
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=$$NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_APP_ID=$$NEXT_PUBLIC_FIREBASE_APP_ID',
+      '-f', 'Dockerfile', 
+      '.'
+    ]
     secretEnv: [
       'NEXT_PUBLIC_FIREBASE_API_KEY',
       'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
       'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
       'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
       'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-      'NEXT_PUBLIC_FIREBASE_APP_ID',
-      'ALGOLIA_APP_ID',
-      'ALGOLIA_API_KEY'
+      'NEXT_PUBLIC_FIREBASE_APP_ID'
     ]
-    id: build-app
-    waitFor: ['install-deps']
-
-  # 3. Build Docker image for the Next.js app
-  - name: "gcr.io/cloud-builders/docker"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        docker build -t asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$BUILD_ID .
-
-  # 4. Push the image to Artifact Registry / Container Registry
-  - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$BUILD_ID"]
-
-  # 5. Deploy to Cloud Run (managed)
-  - name: "gcr.io/cloud-builders/gcloud"
-    args:
-      - "run"
-      - "deploy"
-      - "specsheet-generator"
-      - "--image=asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$BUILD_ID"
-      - "--region=asia-northeast1"
-      - "--platform=managed"
-      - "--min-instances=1"
-      - "--service-account=specsheet-run-sa@$PROJECT_ID.iam.gserviceaccount.com"
-      - "--allow-unauthenticated"
-      - "--set-secrets=ALGOLIA_APP_ID=ALGOLIA_APP_ID:latest,ALGOLIA_API_KEY=ALGOLIA_API_KEY:latest,GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest"
-      - "--update-env-vars=CORS_ALLOW_ORIGIN=https://your-frontend-domain.com"
-
-# Define available secrets from Secret Manager
+    
+  # イメージのプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:latest']
+    
+  # Cloud Runへデプロイ
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: [
+      'run', 'deploy', 'specsheet-generator', 
+      '--image=asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:latest', 
+      '--region=asia-northeast1', 
+      '--platform=managed', 
+      '--service-account=frontend-sa@specsheet-generator.iam.gserviceaccount.com',
+      '--min-instances=1',
+      '--allow-unauthenticated',
+      '--set-env-vars=ALLOWED_ORIGINS=https://specsheet-generator-503166429433.asia-northeast1.run.app,http://localhost:3000',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_PROJECT_ID=$$NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      '--set-env-vars=NEXT_PUBLIC_FIREBASE_APP_ID=$$NEXT_PUBLIC_FIREBASE_APP_ID'
+    ]
+    secretEnv: [
+      'NEXT_PUBLIC_FIREBASE_API_KEY',
+      'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      'NEXT_PUBLIC_FIREBASE_APP_ID'
+    ]
+  
 availableSecrets:
   secretManager:
-    # Firebase Deploy Token (Store your Firebase CI token here)
-    # - versionName: projects/$PROJECT_ID/secrets/FIREBASE_TOKEN/versions/latest
-    #   env: 'FIREBASE_TOKEN'
-    # Firebase Public Config (needed at build time)
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_API_KEY/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_API_KEY/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_API_KEY'
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_PROJECT_ID/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_PROJECT_ID/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID'
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'
-    - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_FIREBASE_APP_ID/versions/latest
+    - versionName: projects/specsheet-generator/secrets/NEXT_PUBLIC_FIREBASE_APP_ID/versions/latest
       env: 'NEXT_PUBLIC_FIREBASE_APP_ID'
-    - versionName: projects/$PROJECT_ID/secrets/ALGOLIA_APP_ID/versions/latest
-      env: 'ALGOLIA_APP_ID'
-    - versionName: projects/$PROJECT_ID/secrets/ALGOLIA_API_KEY/versions/latest
-      env: 'ALGOLIA_API_KEY'
-    # Add NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID if needed
-
-# Tag images with commit SHA for traceability
-images:
-  - "asia-docker.pkg.dev/$PROJECT_ID/specsheet-docker/specsheet-generator:$BUILD_ID"
-
-# Timeout for the entire build
-timeout: '1200s' # 20 minutes
-
-options:
-  logging: CLOUD_LOGGING_ONLY 
