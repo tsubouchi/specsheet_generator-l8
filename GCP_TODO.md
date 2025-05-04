@@ -234,3 +234,93 @@ CI で自動化する場合は **Firebase CI Token** を GitHub Secrets (`FIREBA
   env:
     FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 ```
+
+---
+## 14. CORS対策 🆕
+
+### 14-1. ミドルウェアの実装
+
+Next.jsのミドルウェア機能を使用して、APIルートへのCORS対策を実装します。
+
+`middleware.ts`をプロジェクトルートに作成し、以下の実装を行います：
+
+```typescript
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+// 許可するオリジンのリスト
+const ALLOWED_ORIGINS = [
+  'https://specsheet-generator-503166429433.asia-northeast1.run.app', // 本番環境
+  'http://localhost:3000', // ローカル開発環境
+];
+
+export function middleware(request: NextRequest) {
+  const response = NextResponse.next();
+  const origin = request.headers.get('origin');
+  
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    // CORSヘッダーを設定
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Max-Age', '86400'); // 24時間
+  }
+  
+  // OPTIONSリクエスト（プリフライト）対応
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 204 });
+  }
+  
+  return response;
+}
+
+// APIルートにのみミドルウェアを適用
+export const config = {
+  matcher: '/api/:path*',
+};
+```
+
+### 14-2. Cloud Run カスタムヘッダー設定
+
+Cloud Runにデプロイする際に、CORSヘッダーを設定する方法もあります：
+
+```bash
+# Cloud Runデプロイ時にCORSヘッダーを設定する例
+gcloud run deploy $SERVICE_NAME \
+  --image $IMAGE \
+  --region=$REGION \
+  --service-account=$RUN_SA \
+  --set-env-vars="ALLOWED_ORIGINS=https://example.com,http://localhost:3000" \
+  --add-cloud-sql-instances=$CLOUD_SQL_CONNECTION_NAME \
+  --set-headers="Access-Control-Allow-Origin=*,Access-Control-Allow-Methods=GET;POST;PUT;DELETE;OPTIONS,Access-Control-Allow-Headers=Content-Type;Authorization,Access-Control-Max-Age=3600" \
+  --platform=managed
+```
+
+> 注意: `Access-Control-Allow-Origin=*` はすべてのオリジンからのアクセスを許可します。本番環境では、より制限的な設定を検討してください。
+
+### 14-3. クライアント側でのCORS対策
+
+クライアント側から異なるオリジンのAPIにアクセスする場合は、`credentials: 'include'`オプションを使用して、リクエストにクッキーや認証情報を含めることができます。
+
+```javascript
+// フロントエンドでのAPI呼び出し例（credentials付き）
+fetch('https://api.example.com/data', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
+  credentials: 'include', // クッキーなどの認証情報を含める
+  body: JSON.stringify({ data: 'example' })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
+
+### 14-4. セキュリティ考慮事項
+
+- 信頼できるオリジンのみをホワイトリストに登録
+- プリフライトリクエスト（OPTIONS）への適切な応答
+- クレデンシャル付きリクエストの場合、`Access-Control-Allow-Origin`に`*`を使用しない
+- 必要最小限のメソッドとヘッダーのみを許可
