@@ -16,7 +16,7 @@ export function Markdown({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
         components={{
-          code({ node, inline, className, children, ...props }) {
+          code({ inline, children, ...props }: { inline?: boolean; children?: React.ReactNode } & any) {
             return !inline ? (
               <div className={codeBlockStyle}>{String(children).replace(/\n$/, "")}</div>
             ) : (
@@ -28,11 +28,11 @@ export function Markdown({ content }: { content: string }) {
               </code>
             )
           },
-          pre({ node, children, ...props }) {
+          pre({ children, ...props }: { children?: React.ReactNode } & any) {
             return (
-              <div className={codeBlockStyle} {...props}>
+              <pre className={codeBlockStyle} {...props}>
                 {children}
-              </div>
+              </pre>
             )
           },
           table({ node, ...props }) {

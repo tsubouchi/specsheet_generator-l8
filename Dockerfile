@@ -28,8 +28,8 @@ COPY . .
 # .env.local がビルド時に存在しないようにする (必要な変数はビルド引数やCloud Buildで渡す)
 # COPY .env.local ./.env.local
 
-# ※既に Cloud Build ステップで Next.js ビルド済みのため、ここでは再ビルドしない
-#   .next ディレクトリはビルドコンテキストに含まれるので、そのままコピーして利用する
+# Next.js をビルド（standalone 出力）
+RUN pnpm run build
 
 # 4. Runner Stage (Final Image)
 FROM base AS runner

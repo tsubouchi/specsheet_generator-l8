@@ -84,12 +84,13 @@ export function SpecificationGenerator() {
       text = text.replace(/^```markdown\s*\n/, "").replace(/\n```\s*$/, "")
 
       setSpecification(text)
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("仕様書生成エラー:", error)
-      setError(error.message || "仕様書の生成中にエラーが発生しました")
+      const message = error instanceof Error ? error.message : String(error)
+      setError(message || "仕様書の生成中にエラーが発生しました")
       toast({
         title: "生成失敗",
-        description: error.message || "仕様書の生成中にエラーが発生しました",
+        description: message || "仕様書の生成中にエラーが発生しました",
         variant: "destructive",
       })
     } finally {

@@ -3,18 +3,19 @@
 製品アイデアを入力すると、AI (Gemini) を利用してソフトウェア開発仕様書を自動生成するアプリケーションです。
 Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイされます。
 
-## 技術スタック
+## 技術スタック (2025-05 更新)
 
--   **フロントエンド**: Next.js (React), TypeScript, Tailwind CSS
--   **バックエンド (API)**: Next.js API Routes (Serverless on Cloud Run)
--   **認証**: Firebase Authentication (Google OAuth 2.0)
--   **ホスティング**: Cloud Run (Next.js + API, min-instances=1 でコールドスタートを回避)
--   **データベース**: (現時点ではなし、必要に応じて Firestore 等を追加)
--   **インフラ**: Google Cloud Platform
-    -   Cloud Run: バックエンドAPIの実行環境
-    -   Secret Manager: APIキーなどの機密情報管理
-    -   Cloud Build: CI/CD パイプライン
--   **AIモデル**: Google Gemini API
+- **フロントエンド**: Next.js 15 + React 18, TypeScript, Tailwind CSS (白 / 黒のみ)
+- **バックエンド (API)**: Next.js API Routes → Cloud Run (min-instances=1)
+- **AI**: Google Gemini **2.5 Flash Preview** (`gemini-2.5-flash-preview-04-17`)
+- **認証**: Firebase Authentication (Google OAuth 2.0) — Workload Identity
+- **データベース**: Cloud Firestore – 生成仕様書を `specs` コレクションに保存
+- **CI/CD**:
+  - GitHub Actions → Cloud Build → Cloud Run
+  - イメージは Artifact Registry へ push
+- **インフラ**: GCP
+  - Cloud Run + Secret Manager + Artifact Registry + Firestore
+  - Workload Identity により SA キー不要
 
 ## 環境構築 (初回のみ)
 
@@ -125,14 +126,37 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
     -   **min-instances=1** を指定することで、常時 1 つのインスタンスを維持し、コールドスタートを回避します (若干のランニングコストが発生)。
 
 ### 本番 URL
-
 https://specsheet-generator-503166429433.asia-northeast1.run.app
 
-## TODO
+## API エンドポイント一覧
 
-詳細は `TODO.md` を参照してください。
+| Method | Path | 認証 | 説明 |
+|--------|------|------|------|
+| `POST` | `/api/generate` | Firebase ID トークン (Bearer) | 製品アイデアを送信して仕様書 Markdown を生成し、Firestore に保存。リクエスト JSON: `{ "productIdea": "..." }` |
+| `GET`  | `/api/test`     | なし | Gemini API 接続テスト用。簡易レスポンスを返す |
+
+サンプル (ID トークン付き):
+
+```bash
+TOKEN="$(firebase auth:sign-in-with-email --email=test@example.com --password=PASSWORD --local --json | jq -r .idToken)"
 
 curl -X POST \
   -H "Content-Type: application/json" \
-  -d '{"productIdea":"リアルタイム翻訳チャットボット"}' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"productIdea":"ToDoアプリ"}' \
   https://specsheet-generator-503166429433.asia-northeast1.run.app/api/generate
+```
+
+## 開発 / 運用 TODO（抜粋）
+
+詳細は `GCP_TODO.md` に集約されています。ここでは主要な完了ステータスのみ掲載します。
+
+| カテゴリ | 項目 | 状態 |
+|----------|------|------|
+| インフラ | 必要 API 有効化, SA 作成, WIF, Secret Manager | ✅ 完了 |
+| CI/CD    | GitHub Actions → Cloud Build → Cloud Run | ✅ 完了 |
+| バックエンド | Gemini 2.5 Flash 呼び出し + Firestore 保存 | ✅ 完了 |
+| フロントエンド | Google ログイン UI, 白黒デザイン | ✅ 完了 |
+| API テスト | CURL サンプル | ✅ 完了 |
+
+残タスクが発生した場合は `TODO.md` を更新してください。

@@ -49,8 +49,9 @@ export async function GET(req: NextRequest) {
     return new Response(JSON.stringify({ success: true, data }), {
       headers: { "Content-Type": "application/json" },
     })
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     })

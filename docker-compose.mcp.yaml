@@ -1,0 +1,14 @@
+services:
+  firebase-mcp:
+    build:
+      context: ./firebase-mcp          # リポジトリルートからの相対パス
+      dockerfile: Dockerfile
+    ports:
+      - "5111:5111"
+    volumes:
+      - ./keys/sa.json:/keys/sa.json:ro
+    environment:
+      SERVICE_ACCOUNT_KEY_PATH: /keys/sa.json
+      FIREBASE_PROJECT_ID: specsheet-generator
+      FIREBASE_STORAGE_BUCKET: specsheet-generator.appspot.com
+      PORT: 5111

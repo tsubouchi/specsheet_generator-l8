@@ -38,3 +38,11 @@ next-env.d.ts
 firebase-debug.log
 .firebaserc
 .firebase/
+
+# Firebase service account keys (local dev) を Git 管理対象から除外
+keys/
+
+# Secret JSON credentials
+*.secret.json
+*.key.json
+keys/**/*.json
