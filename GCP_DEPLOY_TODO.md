@@ -15,6 +15,8 @@
 11. [監視とロギング](#11-監視とロギング)
 12. [運用コマンド集](#12-運用コマンド集)
 13. [トラブルシューティング](#13-トラブルシューティング)
+14. [デプロイ課題と解決策](#14-デプロイ課題と解決策)
+15. [今後の対応TODO](#15-今後の対応TODO)
 
 ## 1. アーキテクチャ概要
 
@@ -619,10 +621,9 @@ gcloud run services describe specsheet-generator-frontend --format="yaml(spec.te
 
 | エラー | 原因 | 解決策 |
 |-------|-----|-------|
-| `Service account object must contain a string "private_key" property` | Firebase Admin SDKの初期化に必要なサービスアカウント鍵が不足している | Secret Managerから`FIREBASE_ADMIN_KEY`を正しく取得できているか確認。ローカルでは`FIREBASE_ADMIN_KEY_PATH`が正しいパスを指しているか確認 |
-| `Firebase: Error (auth/invalid-api-key)` | クライアント側のFirebase初期化に無効なAPIキーが使用されている | 環境変数`NEXT_PUBLIC_FIREBASE_API_KEY`が正しく設定されているか確認。Cloud Runサービスの環境変数またはSecret Managerの値を確認 |
-| `Error: The caller does not have permission` | サービスアカウントに必要な権限がない | Firebase Adminサービスアカウントに`roles/firebase.admin`と`roles/datastore.user`が付与されているか確認 |
-| Algolia関連エラー | Algolia環境変数が未設定 | 必要に応じて`NEXT_PUBLIC_ALGOLIA_APP_ID`と`NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY`を設定 |
+| `Service account object must contain a string "private_key" property` | Firebase Admin SDKの初期化に必要な鍵が不足 | サービスアカウント作成と`FIREBASE_ADMIN_KEY`シークレットの設定 |
+| `Firebase: Error (auth/invalid-api-key)` | クライアント側の初期化で無効なAPIキー | Secret Managerに正しいAPIキーを設定し、ビルド時に環境変数として渡す |
+| `Algolia 環境変数が未設定です。全文検索は無効化されます。` | Algolia設定が不足 | Algolia関連の環境変数をSecret Managerに追加し、cloudbuild.yamlを更新 |
 
 ### 13.5 Firebase Admin SDK初期化のデバッグ
 
@@ -650,3 +651,109 @@ try {
 # テスト実行
 node firebase-admin-test.js
 ```
+
+## 14. デプロイ課題と解決策
+
+これまでのデプロイ過程で遭遇した問題と解決策をまとめます。
+
+### 14.1 Cloud Build設定の問題
+
+| 問題 | 原因 | 解決策 |
+|------|------|-------|
+| `key "_REGION" in the substitution data is not matched in the template` | cloudbuild.yamlで定義した`_REGION`変数がテンプレート内で使用されていない | 未使用の`substitutions`セクションを削除 |
+| `invalid argument "asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:" for "-t, --tag" flag` | `$COMMIT_SHA`変数が手動ビルド時に未定義 | `latest`タグを使用するように変更 |
+| `Firebase: Error (auth/invalid-api-key)` | Next.jsビルド時にFirebase設定が読み込めない | Dockerfileに`--build-arg`でFirebase環境変数を渡すよう修正 |
+| `The command '/bin/sh -c pnpm run build' returned a non-zero code: 1` | ビルド過程でFirebase設定関連のエラー | 環境変数を適切に設定、cloudbuild.yamlを修正してビルド時に渡す |
+
+### 14.2 Firebase関連の問題
+
+| 問題 | 原因 | 解決策 |
+|------|------|-------|
+| `Service account object must contain a string "private_key" property` | Firebase Admin SDKの初期化に必要な鍵が不足 | サービスアカウント作成と`FIREBASE_ADMIN_KEY`シークレットの設定 |
+| `FirebaseError: Firebase: Error (auth/invalid-api-key)` | クライアント側の初期化で無効なAPIキー | Secret Managerに正しいAPIキーを設定し、ビルド時に環境変数として渡す |
+| `Algolia 環境変数が未設定です。全文検索は無効化されます。` | Algolia設定が不足 | Algolia関連の環境変数をSecret Managerに追加し、cloudbuild.yamlを更新 |
+
+### 14.3 改善された設定
+
+最新のcloudbuild.yaml:
+```yaml
+steps:
+  # Dockerイメージビルド - ビルド中に環境変数を渡す
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', 
+      '-t', 'asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:latest', 
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=$$NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_APP_ID=$$NEXT_PUBLIC_FIREBASE_APP_ID',
+      '--build-arg', 'NEXT_PUBLIC_ALGOLIA_APP_ID=$$NEXT_PUBLIC_ALGOLIA_APP_ID',
+      '--build-arg', 'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=$$NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
+      '--build-arg', 'ALGOLIA_ADMIN_API_KEY=$$ALGOLIA_ADMIN_API_KEY',
+      '-f', 'Dockerfile', 
+      '.'
+    ]
+    secretEnv: [
+      'NEXT_PUBLIC_FIREBASE_API_KEY',
+      'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      'NEXT_PUBLIC_FIREBASE_APP_ID',
+      'NEXT_PUBLIC_ALGOLIA_APP_ID',
+      'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
+      'ALGOLIA_ADMIN_API_KEY'
+    ]
+    
+  # 以下略...
+```
+
+## 15. 今後の対応TODO
+
+以下の項目は今後対応が必要なタスクです：
+
+### 15.1 優先度：高
+
+- [ ] Cloud Buildを使用した手動ビルドとデプロイのテスト実行
+  ```bash
+  gcloud builds submit --config=cloudbuild.yaml .
+  ```
+- [ ] デプロイ後のサービス動作確認
+  ```bash
+  gcloud run services describe specsheet-generator --region=asia-northeast1
+  ```
+- [ ] サービスのログ確認とエラー対応
+  ```bash
+  gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=specsheet-generator" --limit=10
+  ```
+
+### 15.2 優先度：中
+
+- [ ] GitHub連携のCloud Buildトリガー設定（GCPコンソールから設定）
+- [ ] カスタムドメイン設定（必要な場合）
+  ```bash
+  gcloud run domain-mappings create --service=specsheet-generator --domain=your-domain.com --region=asia-northeast1
+  ```
+- [ ] Cloud Monitoringアラートの設定
+
+### 15.3 優先度：低
+
+- [ ] CIパイプラインの最適化（ビルド時間短縮）
+- [ ] テスト環境とプロダクション環境の分離
+- [ ] バックアップと復元手順の整備
+
+### 15.4 Algolia設定
+
+Algolia全文検索を有効化するには、以下の手順を実施してください：
+
+1. `setup_algolia_secrets.sh`ファイルを編集して実際のAPIキーを設定
+2. シェルスクリプトを実行してSecret Managerに登録
+   ```bash
+   ./setup_algolia_secrets.sh
+   ```
+3. Cloud Buildを実行して環境変数を反映
+   ```bash
+   gcloud builds submit --config=cloudbuild.yaml .
+   ```
