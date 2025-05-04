@@ -13,6 +13,19 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // テストユーザー情報を返す（クエリパラメータがtestuser=trueの場合）
+    const url = new URL(req.url)
+    if (url.searchParams.get('testuser') === 'true') {
+      return new Response(JSON.stringify({
+        email: process.env.TEST_USER_EMAIL || "test@example.com",
+        password: process.env.TEST_USER_PASSWORD || "testpassword123",
+        firebase_api_key: process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     // 最もシンプルなテスト
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`
 

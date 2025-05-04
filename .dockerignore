@@ -1,0 +1,58 @@
+# 依存関係とビルドファイル
+node_modules
+.pnpm-store
+.next
+out
+build
+dist
+
+# 環境設定と秘密情報
+.env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.key.json
+*.secret.json
+keys/
+
+# ログファイル
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# 開発環境設定
+.git
+.github
+.gitignore
+.vscode
+.idea
+
+# テスト関連
+coverage
+tests
+playwright-report
+test-results
+
+# Firebase関連
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+firebase-mcp/
+
+# Docker関連
+Dockerfile
+.dockerignore
+docker-compose*
+
+# その他
+README.md
+LICENSE
+*.md 
