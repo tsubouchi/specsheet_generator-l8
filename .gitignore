@@ -46,3 +46,10 @@ keys/
 *.secret.json
 *.key.json
 keys/**/*.json
+
+# Submodules large files
+firebase-mcp/node_modules
+firebase-mcp/dist
+firebase-mcp/.firebase
+firebase-mcp/ui-debug.log
+firebase-mcp/firebase-debug.log
