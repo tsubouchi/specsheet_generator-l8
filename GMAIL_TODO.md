@@ -6,96 +6,145 @@
 ## 2. 前提条件
 - Firebase認証で認証済みのユーザーのみ利用可能
 - PDFまたはMarkdown形式の仕様書を添付ファイルとして送信
-- ユーザー自身のGmailアカウントから送信する（OAuth認証）
+- ユーザー自身のGmailアカウントから送信する（Firebase OAuth認証）
 
 ## 3. 技術スタック
 - Next.js (APIルート)
 - Google Gmail API
-- OAuth 2.0認証
+- Firebase OAuth 2.0認証
 - Cloud Run（デプロイ先）
 
 ## 4. 開発手順詳細
 
-### 4.1 GCP設定 & APIの有効化
+### 4.1 Firebase と Gmail API の設定
 
 1. GCPプロジェクトでGmail APIを有効化する
    ```bash
    gcloud services enable gmail.googleapis.com
    ```
 
-2. OAuth同意画面の設定
-   - GCPコンソールで「APIとサービス」→「OAuth同意画面」を開く
-   - 適切な範囲を設定: `https://www.googleapis.com/auth/gmail.send`
-   - 必要なテストユーザーを追加
+2. Firebase Authentication で Google プロバイダを有効化
+   - Firebase コンソールで「Authentication」→「Sign-in method」を開く
+   - Google プロバイダを有効化
+   - Gmail APIのスコープを追加: `https://www.googleapis.com/auth/gmail.send`
 
-3. OAuthクライアントIDの作成
-   ```bash
-   gcloud auth application-default login
-   gcloud auth application-default set-quota-project specsheet-generator
+3. Firebase プロジェクト設定の確認
+   ```javascript
+   const firebaseConfig = {
+     apiKey: "AIzaSyCmbs5ZI8CxRunlBsAqjDKrPOiJLmrsDJM",
+     authDomain: "specsheet-generator.firebaseapp.com",
+     projectId: "specsheet-generator",
+     storageBucket: "specsheet-generator.firebasestorage.app",
+     messagingSenderId: "503166429433",
+     appId: "1:503166429433:web:359179414d605cc91eda28"
+   };
    ```
 
-4. OAuthクライアントシークレットをダウンロードし安全に保存
-   - JSONファイルをダウンロードして`keys/gmail-credentials.json`として保存
+4. Firebase Admin SDK の設定
+   - Firebase コンソールで「プロジェクト設定」→「サービスアカウント」からサービスアカウントキーをダウンロード
+   - キーファイルを `keys/firebase-admin.json` として保存
 
 ### 4.2 バックエンド実装
 
-1. Gmail APIクライアントライブラリのインストール
+1. 必要なライブラリのインストール
    ```bash
-   pnpm add @googleapis/gmail
+   pnpm add @googleapis/gmail firebase-admin
    ```
 
-2. Gmail API連携用のライブラリ関数の作成 (`lib/gmail.ts`)
+2. Firebase Admin SDK 初期化 (`lib/firebase-admin.ts`)
+   ```typescript
+   import * as admin from 'firebase-admin';
+   import { getApps } from 'firebase-admin/app';
+
+   if (!getApps().length) {
+     try {
+       admin.initializeApp({
+         credential: admin.credential.cert({
+           projectId: process.env.FIREBASE_PROJECT_ID,
+           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+           privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+         }),
+       });
+     } catch (error) {
+       console.error('Firebase admin initialization error', error);
+     }
+   }
+
+   export default admin;
+   ```
+
+3. Gmail API連携用のライブラリ関数の作成 (`lib/gmail.ts`)
    ```typescript
    import { google } from 'googleapis';
-   import { OAuth2Client } from 'google-auth-library';
+   import admin from './firebase-admin';
 
-   // OAuth2クライアントの設定
-   export const getOAuth2Client = async () => {
-     const credentials = require('../../keys/gmail-credentials.json');
-     const oauth2Client = new OAuth2Client(
-       credentials.web.client_id,
-       credentials.web.client_secret,
-       process.env.NEXT_PUBLIC_URL + '/api/gmail-callback'
-     );
-     return oauth2Client;
-   };
-
-   // 認可URLの生成
-   export const getAuthUrl = async () => {
-     const oauth2Client = await getOAuth2Client();
-     return oauth2Client.generateAuthUrl({
-       access_type: 'offline',
-       scope: ['https://www.googleapis.com/auth/gmail.send'],
-       prompt: 'consent',
-     });
+   // Firebase tokenからGmailへのアクセストークンを取得
+   export const getGmailToken = async (firebaseToken: string) => {
+     try {
+       // Firebase tokenを検証
+       const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+       const uid = decodedToken.uid;
+       
+       // ユーザー情報を取得
+       const userRecord = await admin.auth().getUser(uid);
+       
+       // Providerデータからgoogleアクセストークンを取得
+       const googleProvider = userRecord.providerData.find(
+         provider => provider.providerId === 'google.com'
+       );
+       
+       if (!googleProvider || !googleProvider.photoURL) {
+         throw new Error('Googleアカウントでのログインが必要です');
+       }
+       
+       // Firebase AuthのProviderデータからGoogleトークンを取得
+       // 注：これは簡略化したもので、実際にはFirebase Auth Custom Claimなどを使う必要がある場合があります
+       const tokens = await admin.auth().createCustomToken(uid, {
+         google_access_token: googleProvider.photoURL
+       });
+       
+       return tokens;
+     } catch (error) {
+       console.error('Gmailトークン取得エラー:', error);
+       throw error;
+     }
    };
 
    // メール送信関数
    export const sendEmail = async (
-     accessToken: string,
+     firebaseToken: string,
      to: string,
      subject: string,
      body: string,
      attachmentContent?: string,
      attachmentName?: string
    ) => {
-     const oauth2Client = await getOAuth2Client();
-     oauth2Client.setCredentials({ access_token: accessToken });
-     
-     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-     
-     // メールの作成とエンコード処理
-     const message = createEmailWithAttachment(to, subject, body, attachmentContent, attachmentName);
-     
-     // メール送信
-     const result = await gmail.users.messages.send({
-       userId: 'me',
-       requestBody: {
-         raw: Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-       }
-     });
-     
-     return result.data;
+     try {
+       // Firebase IDトークンから認証情報を取得
+       const accessToken = await getGmailToken(firebaseToken);
+       
+       // Gmail APIクライアントの初期化
+       const oauth2Client = new google.auth.OAuth2();
+       oauth2Client.setCredentials({ access_token: accessToken });
+       
+       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+       
+       // メールの作成とエンコード処理
+       const message = createEmailWithAttachment(to, subject, body, attachmentContent, attachmentName);
+       
+       // メール送信
+       const result = await gmail.users.messages.send({
+         userId: 'me',
+         requestBody: {
+           raw: Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+         }
+       });
+       
+       return result.data;
+     } catch (error) {
+       console.error('メール送信エラー:', error);
+       throw error;
+     }
    };
 
    // メールデータの作成（添付ファイルを含む）
@@ -143,49 +192,11 @@
    }
    ```
 
-3. 認証コールバックAPIの実装 (`app/api/gmail-callback/route.ts`)
-   ```typescript
-   import { NextRequest, NextResponse } from 'next/server';
-   import { getOAuth2Client } from '../../../lib/gmail';
-   import { cookies } from 'next/headers';
-
-   export async function GET(req: NextRequest) {
-     try {
-       const url = new URL(req.url);
-       const code = url.searchParams.get('code');
-       
-       if (!code) {
-         return NextResponse.json({ error: '認証コードがありません' }, { status: 400 });
-       }
-       
-       const oauth2Client = await getOAuth2Client();
-       const { tokens } = await oauth2Client.getToken(code);
-       
-       // トークンを安全に保存（本番環境ではより安全な方法を使用）
-       if (tokens.access_token) {
-         cookies().set('gmail_access_token', tokens.access_token, {
-           httpOnly: true,
-           secure: process.env.NODE_ENV === 'production',
-           maxAge: 3600, // 1時間
-           path: '/'
-         });
-       }
-       
-       // フロントエンドにリダイレクト
-       return NextResponse.redirect(new URL('/email-sender', req.url));
-     } catch (error) {
-       console.error('Gmail認証エラー:', error);
-       return NextResponse.json({ error: '認証に失敗しました' }, { status: 500 });
-     }
-   }
-   ```
-
 4. メール送信APIの実装 (`app/api/gmail-send/route.ts`)
    ```typescript
    import { NextRequest, NextResponse } from 'next/server';
-   import { sendEmail } from '../../../lib/gmail';
-   import { auth } from '@firebase/auth';
-   import { cookies } from 'next/headers';
+   import { sendEmail } from '@/lib/gmail';
+   import admin from '@/lib/firebase-admin';
 
    export async function POST(req: NextRequest) {
      try {
@@ -195,10 +206,14 @@
          return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
        }
        
-       // アクセストークンの取得
-       const accessToken = cookies().get('gmail_access_token')?.value;
-       if (!accessToken) {
-         return NextResponse.json({ error: 'Gmailへの認証が必要です' }, { status: 401 });
+       const idToken = authHeader.split('Bearer ')[1];
+       
+       // Firebaseトークン検証
+       try {
+         await admin.auth().verifyIdToken(idToken);
+       } catch (error) {
+         console.error('Firebase認証エラー:', error);
+         return NextResponse.json({ error: '無効な認証トークンです' }, { status: 401 });
        }
        
        const body = await req.json();
@@ -210,7 +225,7 @@
        
        // メール送信処理
        const result = await sendEmail(
-         accessToken,
+         idToken,
          to,
          subject,
          emailBody,
@@ -224,27 +239,10 @@
        
        // アクセストークンの期限切れの場合は再認証を促す
        if (error.message?.includes('invalid_grant') || error.message?.includes('Invalid Credentials')) {
-         cookies().delete('gmail_access_token');
          return NextResponse.json({ error: '再認証が必要です', requireReauth: true }, { status: 401 });
        }
        
        return NextResponse.json({ error: 'メールの送信に失敗しました' }, { status: 500 });
-     }
-   }
-   ```
-
-5. 認証開始APIの実装 (`app/api/gmail-auth/route.ts`)
-   ```typescript
-   import { NextRequest, NextResponse } from 'next/server';
-   import { getAuthUrl } from '../../../lib/gmail';
-
-   export async function GET(req: NextRequest) {
-     try {
-       const authUrl = await getAuthUrl();
-       return NextResponse.json({ authUrl });
-     } catch (error) {
-       console.error('Gmail認証URLの生成に失敗:', error);
-       return NextResponse.json({ error: '認証URLの生成に失敗しました' }, { status: 500 });
      }
    }
    ```
@@ -256,54 +254,56 @@
    'use client';
    
    import { useState, useEffect } from 'react';
-   import { useAuth } from '@/hooks/useAuth';
+   import { useAuth } from '@/components/AuthProvider';
    import { Button } from '@/components/ui/button';
    import { Input } from '@/components/ui/input';
    import { Textarea } from '@/components/ui/textarea';
    import { useToast } from '@/components/ui/use-toast';
+   import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+   import { auth } from '@/lib/firebase';
    
    export default function EmailSenderPage() {
-     const { user, isLoading } = useAuth();
+     const { user, loading } = useAuth();
      const { toast } = useToast();
      const [to, setTo] = useState('');
      const [subject, setSubject] = useState('');
      const [body, setBody] = useState('');
-     const [isAuthenticated, setIsAuthenticated] = useState(false);
      const [isSending, setIsSending] = useState(false);
      const [specData, setSpecData] = useState<any>(null);
      
      useEffect(() => {
-       // 仕様書データの取得（localStorageなどから）
-       const savedSpec = localStorage.getItem('currentSpec');
-       if (savedSpec) {
-         setSpecData(JSON.parse(savedSpec));
-         setSubject(`仕様書: ${JSON.parse(savedSpec).title || '無題'}`);
-         setBody(`添付ファイルに仕様書を同封します。ご確認ください。`);
+       // クライアントサイドでのみ実行
+       if (typeof window !== 'undefined') {
+         // 仕様書データの取得（localStorageなどから）
+         const savedSpec = localStorage.getItem('currentSpec');
+         if (savedSpec) {
+           try {
+             const parsedSpec = JSON.parse(savedSpec);
+             setSpecData(parsedSpec);
+             setSubject(`仕様書: ${parsedSpec.title || '無題'}`);
+             setBody(`添付ファイルに仕様書を同封します。ご確認ください。`);
+           } catch (e) {
+             console.error('仕様書データの解析エラー:', e);
+           }
+         }
        }
-       
-       // Gmailの認証状態チェック
-       checkGmailAuth();
      }, []);
-     
-     const checkGmailAuth = async () => {
-       try {
-         const response = await fetch('/api/gmail-check-auth');
-         const data = await response.json();
-         setIsAuthenticated(data.isAuthenticated);
-       } catch (error) {
-         console.error('認証確認エラー:', error);
-       }
-     };
      
      const handleGmailAuth = async () => {
        try {
-         const response = await fetch('/api/gmail-auth');
-         const data = await response.json();
+         // Google認証プロバイダを設定
+         const provider = new GoogleAuthProvider();
+         // Gmail送信のスコープを追加
+         provider.addScope('https://www.googleapis.com/auth/gmail.send');
          
-         if (data.authUrl) {
-           window.location.href = data.authUrl;
-         }
-       } catch (error) {
+         // Googleでサインイン
+         await signInWithPopup(auth, provider);
+         
+         toast({
+           title: '認証成功',
+           description: 'Gmailと連携しました',
+         });
+       } catch (error: any) {
          console.error('Gmail認証エラー:', error);
          toast({
            title: 'エラー',
@@ -323,14 +323,26 @@
          return;
        }
        
+       if (!user) {
+         toast({
+           title: '認証エラー',
+           description: 'ログインが必要です',
+           variant: 'destructive',
+         });
+         return;
+       }
+       
        setIsSending(true);
        
        try {
+         // IDトークンを取得
+         const idToken = await user.getIdToken();
+         
          const response = await fetch('/api/gmail-send', {
            method: 'POST',
            headers: {
              'Content-Type': 'application/json',
-             'Authorization': `Bearer ${await user?.getIdToken()}`
+             'Authorization': `Bearer ${idToken}`
            },
            body: JSON.stringify({
              to,
@@ -354,7 +366,7 @@
              description: 'Gmailの認証が切れました。再度認証してください',
              variant: 'destructive',
            });
-           setIsAuthenticated(false);
+           handleGmailAuth();
          } else {
            throw new Error(data.error || '送信に失敗しました');
          }
@@ -370,7 +382,7 @@
        }
      };
      
-     if (isLoading) return <div>読み込み中...</div>;
+     if (loading) return <div>読み込み中...</div>;
      
      if (!user) {
        return (
@@ -381,16 +393,20 @@
        );
      }
      
+     const isGoogleProvider = user.providerData.some(
+       provider => provider.providerId === 'google.com'
+     );
+     
      return (
        <div className="p-6 max-w-2xl mx-auto">
          <h1 className="text-2xl font-bold mb-6">仕様書をメールで送信</h1>
          
-         {!isAuthenticated ? (
+         {!isGoogleProvider ? (
            <div className="mb-6 p-4 border rounded-md bg-yellow-50">
-             <h2 className="font-semibold mb-2">Gmail認証が必要です</h2>
-             <p className="mb-4">仕様書を送信するには、Gmailへのアクセス許可が必要です。</p>
+             <h2 className="font-semibold mb-2">Google認証が必要です</h2>
+             <p className="mb-4">仕様書を送信するには、Googleアカウントでのログインが必要です。</p>
              <Button onClick={handleGmailAuth}>
-               Gmailと連携する
+               Googleアカウントで認証する
              </Button>
            </div>
          ) : (
@@ -457,17 +473,25 @@
    import React from 'react';
    import { Button } from '@/components/ui/button';
    import { useRouter } from 'next/navigation';
-   import { Envelope } from 'lucide-react';
+   import { Mail } from 'lucide-react';
+   import { useAuth } from '@/components/AuthProvider';
 
    interface EmailButtonProps {
      specId?: string;
    }
 
-   export function EmailButton({ specId }: EmailButtonProps) {
+   export function EmailButton({ specId }: EmailButtonProps = {}) {
      const router = useRouter();
+     const { user } = useAuth();
      
      const handleClick = () => {
-       router.push('/email-sender');
+       if (typeof window !== 'undefined') {
+         // 現在表示中の仕様書データを保存
+         if (specId) {
+           localStorage.setItem('emailSpecId', specId);
+         }
+         router.push('/email-sender');
+       }
      };
      
      return (
@@ -476,48 +500,42 @@
          size="sm"
          onClick={handleClick}
          className="flex items-center gap-1"
+         disabled={!user}
        >
-         <Envelope className="h-4 w-4" />
+         <Mail className="h-4 w-4" />
          <span>メールで送信</span>
        </Button>
      );
    }
    ```
 
-3. SaveButtonコンポーネントにメール機能を統合 (`components/SaveButton.tsx`)
-   ```tsx
-   // EmailButtonコンポーネントをインポート
-   import { EmailButton } from './EmailButton';
-   
-   // 既存のコンポーネントにEmailButtonを追加
-   const saveOptions = (
-     <div className="flex flex-col gap-2 p-4">
-       {/* 既存のコード */}
-       <div className="flex gap-2 mt-2">
-         <DriveButton specId={currentSpecId} />
-         <EmailButton specId={currentSpecId} />
-       </div>
-     </div>
-   );
-   ```
+### 4.4 Firebase プロジェクト設定の更新
 
-### 4.4 テスト
+1. Google Sign-In のスコープ拡張
+   - Firebase コンソールで「Authentication」→「Settings」→「Advanced」
+   - OAuth スコープに `https://www.googleapis.com/auth/gmail.send` を追加
+
+2. Google Cloud Console で Gmail API の制限を設定
+   - APIとサービス」→「認証情報」→「制限事項」で、アプリからのみアクセス可能に設定
+
+### 4.5 テスト
 
 1. ローカル環境でのテスト
    ```bash
    pnpm dev
    ```
 
-2. Gmail API連携のテスト
-   - 認証フロー
+2. Firebase認証を使ったGmail API連携のテスト
+   - Googleログインフロー
+   - スコープの付与
    - メール送信機能
    - エラーハンドリング
 
-### 4.5 デプロイ準備
+### 4.6 デプロイ準備
 
 1. Cloud Buildの更新（`cloudbuild.yaml`に環境変数を追加）
    ```yaml
-   # Gmail API関連の環境変数を追加
+   # Firebase Admin SDK関連の環境変数を追加
    - name: "gcr.io/cloud-builders/gcloud"
      args:
        - "run"
@@ -529,28 +547,22 @@
        - "--min-instances=1"
        - "--service-account=specsheet-run-sa@$PROJECT_ID.iam.gserviceaccount.com"
        - "--allow-unauthenticated"
-       - "--set-secrets=GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest"
-       - "--update-env-vars=GMAIL_REDIRECT_URI=https://your-domain.com/api/gmail-callback"
+       - "--set-secrets=FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest"
+       - "--update-env-vars=FIREBASE_PROJECT_ID=specsheet-generator,FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@specsheet-generator.iam.gserviceaccount.com"
    ```
 
 2. Secret Managerに認証情報を保存
    ```bash
-   # OAuth2クライアントIDをシークレットとして保存
-   gcloud secrets create GMAIL_CLIENT_ID --data-file=- <<< "YOUR_CLIENT_ID"
+   # Firebase Admin SDKの秘密鍵をシークレットとして保存
+   gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=- <<< "YOUR_PRIVATE_KEY"
    
-   # OAuth2クライアントシークレットをシークレットとして保存
-   gcloud secrets create GMAIL_CLIENT_SECRET --data-file=- <<< "YOUR_CLIENT_SECRET"
-   ```
-
-3. サービスアカウントにGmail API権限を付与
-   ```bash
-   # サービスアカウントにGmailの権限を付与
-   gcloud projects add-iam-policy-binding specsheet-generator \
+   # サービスアカウントにシークレットアクセス権限を付与
+   gcloud secrets add-iam-policy-binding FIREBASE_PRIVATE_KEY \
      --member="serviceAccount:specsheet-run-sa@specsheet-generator.iam.gserviceaccount.com" \
-     --role="roles/gmail.settings.sharing"
+     --role="roles/secretmanager.secretAccessor"
    ```
 
-### 4.6 GCPへのデプロイ
+### 4.7 GCPへのデプロイ
 
 1. 本番環境へのデプロイ
    ```bash
@@ -559,20 +571,21 @@
    ```
 
 2. デプロイ後の動作確認
-   - 認証フロー
+   - Firebase認証フロー
+   - Gmail APIとの連携
    - メール送信機能
    - セキュリティ設定
 
 ## 5. セキュリティ考慮事項
-- ユーザーの認証トークンはHTTP Cookieに保存し、HTTPOnlyとSecure属性を設定
-- バックエンドでFirebase認証を必ず確認
-- OAuth同意画面の設定は必要最小限のスコープで設定
-- アクセストークンの有効期限を管理し、必要に応じて再認証を促す
+- Firebase認証で適切なユーザー認証を確保
+- 必要最小限のスコープをリクエスト（gmail.send のみ）
+- バックエンドでFirebase IDトークンを必ず検証
+- 秘密鍵やAPIキーは環境変数またはSecret Managerで管理
 
 ## 6. 注意点
 - Gmail APIには1日あたりの送信制限があります（一般的には1日に500通）
 - 添付ファイルサイズに制限あり（25MB）
-- OAuthの設定では適切なリダイレクトURIの設定が必要
+- Googleアカウントでのログインが必須
 
 ## 7. 追加機能（オプション）
 - 送信履歴の保存と管理
@@ -582,22 +595,21 @@
 
 ## 8. リソース
 - [Gmail API ドキュメント](https://developers.google.com/gmail/api/guides)
-- [Google OAuth 2.0 ドキュメント](https://developers.google.com/identity/protocols/oauth2)
+- [Firebase Authentication ドキュメント](https://firebase.google.com/docs/auth)
 - [Gmail API Node.js クライアントライブラリ](https://github.com/googleapis/google-api-nodejs-client#google-apis-nodejs-client)
 
 ## 9. マイルストーン & 進捗
 | # | タスク | Owner | Due | Status |
 |---|--------|-------|-----|--------|
-| 1 | Gmail API有効化 | ops | | 🔄 |
-| 2 | OAuth同意画面設定 | ops | | 🔄 |
-| 3 | OAuthクライアントID作成 | ops | | 🔄 |
+| 1 | Gmail API有効化 | ops | | ✅ |
+| 2 | Firebase AuthでのGoogle認証設定 | ops | | 🔄 |
+| 3 | Firebase Admin SDK設定 | ops | | 🔄 |
 | 4 | Gmail連携用ライブラリ実装 | dev | | 🔄 |
-| 5 | 認証APIルート実装 | dev | | 🔄 |
-| 6 | メール送信APIルート実装 | dev | | 🔄 |
-| 7 | フロントエンド送信ページ実装 | dev | | 🔄 |
-| 8 | EmailButtonコンポーネント実装 | dev | | 🔄 |
-| 9 | ローカルテスト | qa | | 🔄 |
-| 10 | シークレット設定 | ops | | 🔄 |
-| 11 | Cloud Run環境変数設定 | ops | | 🔄 |
-| 12 | 本番環境デプロイ | ops | | 🔄 |
-| 13 | 本番環境テスト | qa | | 🔄 |
+| 5 | メール送信APIルート実装 | dev | | 🔄 |
+| 6 | フロントエンド送信ページ実装 | dev | | 🔄 |
+| 7 | EmailButtonコンポーネント実装 | dev | | ✅ |
+| 8 | ローカルテスト | qa | | 🔄 |
+| 9 | Firebase Admin SDK用シークレット設定 | ops | | 🔄 |
+| 10 | Cloud Run環境変数設定 | ops | | 🔄 |
+| 11 | 本番環境デプロイ | ops | | 🔄 |
+| 12 | 本番環境テスト | qa | | 🔄 |

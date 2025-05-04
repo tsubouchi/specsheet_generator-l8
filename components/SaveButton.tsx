@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/components/AuthProvider';
 import { Copy } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { EmailButton } from './EmailButton';
 
 interface SaveButtonProps {
   markdown: string;
@@ -59,6 +60,9 @@ export function SaveButton({ markdown, defaultPublic = false }: SaveButtonProps)
         <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" checked={publicShare} onChange={e=>setPublicShare(e.target.checked)} /> 公開リンク
         </label>
+      </div>
+      <div className="flex items-center gap-2">
+        <EmailButton />
       </div>
       {link && (
         <div className="flex items-center gap-1 text-xs break-all">

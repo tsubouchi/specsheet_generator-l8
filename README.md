@@ -10,6 +10,10 @@ Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイさ
 - **AI**: Google Gemini **2.5 Flash Preview** (`gemini-2.5-flash-preview-04-17`)
 - **認証**: Firebase Authentication (Google OAuth 2.0) — Workload Identity
 - **データベース**: Cloud Firestore – 生成仕様書を `specs` コレクションに保存
+- **外部連携**:
+  - **Google Drive API** – 仕様書のDrive保存・共有機能
+  - **Gmail API** – 仕様書のメール送信機能
+  - Firebase OAuth 2.0による権限委譲
 - **CI/CD**:
   - GitHub Actions → Cloud Build → Cloud Run
   - イメージは Artifact Registry へ push
@@ -36,6 +40,8 @@ gcloud services enable \
     secretmanager.googleapis.com \
     cloudbuild.googleapis.com \
     iam.googleapis.com \
+    drive.googleapis.com \
+    gmail.googleapis.com \
     --project=specsheet-generator
 ```
 
@@ -83,7 +89,24 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
     -   「Sign-in method」タブを開きます。
     -   「Google」プロバイダーを有効にし、サポートメールアドレスを選択します。
     -   (必要に応じて) 承認済みドメインにデプロイ先のドメインを追加します。
+    -   Google認証プロバイダーの詳細設定で追加スコープを構成:
+       - `https://www.googleapis.com/auth/drive.file`（Drive連携用）
+       - `https://www.googleapis.com/auth/gmail.send`（Gmail連携用）
 4.  **Hosting**: 今回は Firebase Hosting を使用せず、Cloud Run に統合デプロイするためスキップします。
+
+### 6. Firebase Admin SDK の設定
+
+Firebase Admin SDKのサービスアカウントキーをSecret Managerに登録します。
+
+```bash
+# Firebase Admin SDKの秘密鍵をシークレットとして保存
+gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=- <<< "YOUR_PRIVATE_KEY"
+
+# サービスアカウントにシークレットアクセス権限を付与
+gcloud secrets add-iam-policy-binding FIREBASE_PRIVATE_KEY \
+  --member="serviceAccount:specsheet-run-sa@specsheet-generator.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
 
 ## 追加メモ (2025-04-30)
 
@@ -106,6 +129,11 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
 
     # ローカル開発時のみ Gemini API を直接叩く場合に設定
     # GOOGLE_GENERATIVE_AI_API_KEY=YOUR_GEMINI_API_KEY_FOR_LOCAL
+    
+    # Firebase Admin SDK環境変数（ローカル開発用）
+    FIREBASE_PROJECT_ID=specsheet-generator
+    FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@specsheet-generator.iam.gserviceaccount.com
+    FIREBASE_PRIVATE_KEY="YOUR_PRIVATE_KEY"
     ```
 3.  依存関係をインストールします: `pnpm install`
 4.  開発サーバーを起動します: `pnpm run dev`
@@ -134,6 +162,8 @@ https://specsheet-generator-503166429433.asia-northeast1.run.app
 |--------|------|------|------|
 | `POST` | `/api/generate` | Firebase ID トークン (Bearer) | 製品アイデアを送信して仕様書 Markdown を生成し、Firestore に保存。リクエスト JSON: `{ "productIdea": "..." }` |
 | `GET`  | `/api/test`     | なし | Gemini API 接続テスト用。簡易レスポンスを返す |
+| `POST`  | `/api/drive-upload` | Firebase ID トークン (Bearer) | 仕様書をGoogle Driveに保存。リクエスト: `{ "markdown": "...", "driveAccessToken": "..." }` |
+| `POST`  | `/api/gmail-send` | Firebase ID トークン (Bearer) | 仕様書をメールで送信。リクエスト: `{ "to": "...", "subject": "...", "emailBody": "...", "attachmentContent": "...", "attachmentName": "..." }` |
 
 サンプル (ID トークン付き):
 
@@ -147,9 +177,23 @@ curl -X POST \
   https://specsheet-generator-503166429433.asia-northeast1.run.app/api/generate
 ```
 
+## 機能一覧
+
+- **仕様書生成**: Gemini AIを使用した高品質な仕様書生成
+- **仕様書保存**: Firestoreへの自動保存と履歴管理
+- **Google Drive連携**: 
+  - 仕様書のGoogle Driveへの保存
+  - 公開/非公開設定によるアクセス制御
+  - SaveButtonコンポーネントによる簡単操作
+- **Gmail連携**:
+  - 仕様書のメール送信機能
+  - 宛先、件名、本文のカスタマイズ
+  - PDFまたはMarkdown形式の添付ファイル対応
+  - Firebase OAuth 2.0認証によるシームレスな連携
+
 ## 開発 / 運用 TODO（抜粋）
 
-詳細は `GCP_TODO.md` に集約されています。ここでは主要な完了ステータスのみ掲載します。
+詳細は `GCP_TODO.md`、`GMAIL_TODO.md`、`drive_TODO.md` に集約されています。ここでは主要な完了ステータスのみ掲載します。
 
 | カテゴリ | 項目 | 状態 |
 |----------|------|------|
@@ -158,5 +202,15 @@ curl -X POST \
 | バックエンド | Gemini 2.5 Flash 呼び出し + Firestore 保存 | ✅ 完了 |
 | フロントエンド | Google ログイン UI, 白黒デザイン | ✅ 完了 |
 | API テスト | CURL サンプル | ✅ 完了 |
+| Drive連携 | Drive API有効化 | ✅ 完了 |
+| Drive連携 | OAuth同意画面設定・公開 | ✅ 完了 |
+| Drive連携 | フロントエンドトークンフロー | ✅ 完了 |
+| Drive連携 | /api/drive-uploadエンドポイント | ✅ 完了 |
+| Drive連携 | 公開/非公開共有切り替え機能 | ✅ 完了 |
+| Gmail連携 | Gmail API有効化 | ✅ 完了 |
+| Gmail連携 | Firebase認証によるGoogle認証連携 | 🔄 進行中 |
+| Gmail連携 | /api/gmail-sendエンドポイント | 🔄 進行中 |
+| Gmail連携 | フロントエンド送信ページ実装 | 🔄 進行中 |
+| Gmail連携 | EmailButtonコンポーネント | ✅ 完了 |
 
 残タスクが発生した場合は `TODO.md` を更新してください。
