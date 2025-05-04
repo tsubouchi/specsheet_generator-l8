@@ -15,6 +15,7 @@
 | `OAUTH_CLIENT_ID_LOCAL` | `1234-def.apps.googleusercontent.com` | ローカル開発用 ID |
 | `DRIVE_FOLDER_NAME` | `Specsheet Generator` | Drive 内保存フォルダ名 |
 | `DRIVE_SCOPE` | `https://www.googleapis.com/auth/drive.file` | 必須スコープ定数 |
+| `DRIVE_PUBLIC` | `true` または `false` | アップロード後に anyone 共有権限を付与するか |
 
 ---
 ## 1. 必要 API の有効化 ✅
@@ -54,7 +55,7 @@ gcloud services enable drive.googleapis.com --project=$PROJECT_ID
 |----------|------|
 | `hooks/useAuth.ts` | `provider.addScope(DRIVE_SCOPE)` を追加し、アクセストークンを取得して Context に保持 |
 | `lib/googleIdentity.ts` | GIS ワンタイムトークン → アクセストークンのラッパーを実装 |
-| `components/SaveButton.tsx` | fetch(`/api/drive-upload`, { method:'POST', body: JSON.stringify({ markdown, driveAccessToken }) }) を実装 |
+| `components/SaveButton.tsx` | 公開リンクトグル(checkbox) + 生成リンク表示＆コピー機能を実装 |
 
 ### 4-1. SaveButton コード例
 ```tsx
@@ -165,11 +166,12 @@ curl -X POST \
 | 1 | Drive API enable | ops | | ✅ |
 | 2 | OAuth screen publish | ops | | ⏳ |
 | 3 | GIS client IDs env | ops | | ⏳ |
-| 4 | Front token flow | fe | | ⏳ |
-| 5 | /api/drive-upload | be | | ⏳ |
-| 6 | Firestore log | be | | ⏳ |
-| 7 | Cloud Build step | ops | | ⏳ |
-| 8 | E2E tests | qa | | ⏳ |
+| 4 | Front token flow | fe | | ✅ |
+| 5 | /api/drive-upload | be | | ✅ |
+| 6 | Firestore log | be | | ✅ |
+| 7 | Cloud Build step | ops | | ✅ |
+| 8 | E2E tests | qa | | ✅ |
+| 9 | Public share toggle | fe/be | | ✅ |
 
 ---
 ## 10. 参考
