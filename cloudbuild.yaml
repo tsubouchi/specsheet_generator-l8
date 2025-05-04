@@ -13,6 +13,8 @@ steps:
       '--build-arg', 'NEXT_PUBLIC_ALGOLIA_APP_ID=$$NEXT_PUBLIC_ALGOLIA_APP_ID',
       '--build-arg', 'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=$$NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
       '--build-arg', 'ALGOLIA_ADMIN_API_KEY=$$ALGOLIA_ADMIN_API_KEY',
+      '--build-arg', 'FIREBASE_ADMIN_KEY=$$FIREBASE_ADMIN_KEY',
+      '--build-arg', 'ALGOLIA_INDEX_NAME=$$ALGOLIA_INDEX_NAME',
       '-f', 'Dockerfile', 
       '.'
     ]
@@ -25,7 +27,9 @@ steps:
       'NEXT_PUBLIC_FIREBASE_APP_ID',
       'NEXT_PUBLIC_ALGOLIA_APP_ID',
       'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
-      'ALGOLIA_ADMIN_API_KEY'
+      'ALGOLIA_ADMIN_API_KEY',
+      'FIREBASE_ADMIN_KEY',
+      'ALGOLIA_INDEX_NAME'
     ]
     
   # イメージのプッシュ
@@ -52,7 +56,9 @@ steps:
       '--set-env-vars=NEXT_PUBLIC_FIREBASE_APP_ID=$$NEXT_PUBLIC_FIREBASE_APP_ID',
       '--set-env-vars=NEXT_PUBLIC_ALGOLIA_APP_ID=$$NEXT_PUBLIC_ALGOLIA_APP_ID',
       '--set-env-vars=NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=$$NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
-      '--set-env-vars=ALGOLIA_ADMIN_API_KEY=$$ALGOLIA_ADMIN_API_KEY'
+      '--set-env-vars=ALGOLIA_ADMIN_API_KEY=$$ALGOLIA_ADMIN_API_KEY',
+      '--set-env-vars=ALGOLIA_INDEX_NAME=$$ALGOLIA_INDEX_NAME',
+      '--set-secrets=FIREBASE_ADMIN_KEY=FIREBASE_ADMIN_KEY:latest'
     ]
     secretEnv: [
       'NEXT_PUBLIC_FIREBASE_API_KEY',
@@ -63,7 +69,9 @@ steps:
       'NEXT_PUBLIC_FIREBASE_APP_ID',
       'NEXT_PUBLIC_ALGOLIA_APP_ID',
       'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY',
-      'ALGOLIA_ADMIN_API_KEY'
+      'ALGOLIA_ADMIN_API_KEY',
+      'FIREBASE_ADMIN_KEY',
+      'ALGOLIA_INDEX_NAME'
     ]
   
 availableSecrets:
@@ -86,3 +94,7 @@ availableSecrets:
       env: 'NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY'
     - versionName: projects/specsheet-generator/secrets/ALGOLIA_ADMIN_API_KEY/versions/latest
       env: 'ALGOLIA_ADMIN_API_KEY'
+    - versionName: projects/specsheet-generator/secrets/FIREBASE_ADMIN_KEY/versions/latest
+      env: 'FIREBASE_ADMIN_KEY'
+    - versionName: projects/specsheet-generator/secrets/ALGOLIA_INDEX_NAME/versions/latest
+      env: 'ALGOLIA_INDEX_NAME'

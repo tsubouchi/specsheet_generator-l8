@@ -10,6 +10,7 @@ Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイさ
 - **AI**: Google Gemini **2.5 Flash Preview** (`gemini-2.5-flash-preview-04-17`)
 - **認証**: Firebase Authentication (Google OAuth 2.0) — Workload Identity
 - **データベース**: Cloud Firestore – 生成仕様書を `specs` コレクションに保存
+- **検索**: Algolia（オプション）- 全文検索機能
 - **外部連携**:
   - **Google Drive API** – 仕様書のDrive保存・共有機能
   - **Gmail API** – 仕様書のメール送信機能
@@ -99,13 +100,49 @@ echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GOOGLE_GENERATIVE_AI
 Firebase Admin SDKのサービスアカウントキーをSecret Managerに登録します。
 
 ```bash
-# Firebase Admin SDKの秘密鍵をシークレットとして保存
-gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=- <<< "YOUR_PRIVATE_KEY"
+# Firebase Admin サービスアカウントの作成（存在しない場合）
+gcloud iam service-accounts create firebase-admin-sa \
+  --display-name="Firebase Admin SDK Service Account" \
+  --project=specsheet-generator
 
-# サービスアカウントにシークレットアクセス権限を付与
-gcloud secrets add-iam-policy-binding FIREBASE_PRIVATE_KEY \
-  --member="serviceAccount:specsheet-run-sa@specsheet-generator.iam.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+# 権限を付与
+gcloud projects add-iam-policy-binding specsheet-generator \
+  --member="serviceAccount:firebase-admin-sa@specsheet-generator.iam.gserviceaccount.com" \
+  --role="roles/datastore.user"
+
+gcloud projects add-iam-policy-binding specsheet-generator \
+  --member="serviceAccount:firebase-admin-sa@specsheet-generator.iam.gserviceaccount.com" \
+  --role="roles/firebase.admin"
+
+# サービスアカウントキーを作成
+gcloud iam service-accounts keys create firebase-admin-key.json \
+  --iam-account=firebase-admin-sa@specsheet-generator.iam.gserviceaccount.com
+
+# キーをSecret Managerに保存
+gcloud secrets create FIREBASE_ADMIN_KEY --replication-policy="automatic"
+cat firebase-admin-key.json | gcloud secrets versions add FIREBASE_ADMIN_KEY --data-file=-
+
+# キーファイルの削除（セキュリティのため）
+rm firebase-admin-key.json
+```
+
+### 7. Algolia設定（オプション）
+
+全文検索機能を使用する場合は、Algoliaのアカウントを作成し、APIキーをSecret Managerに登録します。
+
+```bash
+# Algolia APIキーをSecret Managerに登録
+gcloud secrets create NEXT_PUBLIC_ALGOLIA_APP_ID --replication-policy="automatic"
+echo -n "YOUR_ALGOLIA_APP_ID" | gcloud secrets versions add NEXT_PUBLIC_ALGOLIA_APP_ID --data-file=-
+
+gcloud secrets create NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY --replication-policy="automatic"
+echo -n "YOUR_ALGOLIA_SEARCH_API_KEY" | gcloud secrets versions add NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY --data-file=-
+
+gcloud secrets create ALGOLIA_ADMIN_API_KEY --replication-policy="automatic"
+echo -n "YOUR_ALGOLIA_ADMIN_API_KEY" | gcloud secrets versions add ALGOLIA_ADMIN_API_KEY --data-file=-
+
+gcloud secrets create ALGOLIA_INDEX_NAME --replication-policy="automatic"
+echo -n "specs" | gcloud secrets versions add ALGOLIA_INDEX_NAME --data-file=-
 ```
 
 ## 追加メモ (2025-04-30)
@@ -131,9 +168,14 @@ gcloud secrets add-iam-policy-binding FIREBASE_PRIVATE_KEY \
     # GOOGLE_GENERATIVE_AI_API_KEY=YOUR_GEMINI_API_KEY_FOR_LOCAL
     
     # Firebase Admin SDK環境変数（ローカル開発用）
-    FIREBASE_PROJECT_ID=specsheet-generator
-    FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@specsheet-generator.iam.gserviceaccount.com
-    FIREBASE_PRIVATE_KEY="YOUR_PRIVATE_KEY"
+    # firebase-admin-key.jsonの内容をそのまま設定
+    FIREBASE_ADMIN_KEY={"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}
+    
+    # Algolia環境変数（オプション - 全文検索機能を使用する場合）
+    NEXT_PUBLIC_ALGOLIA_APP_ID=YOUR_ALGOLIA_APP_ID
+    NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=YOUR_ALGOLIA_SEARCH_API_KEY
+    ALGOLIA_ADMIN_API_KEY=YOUR_ALGOLIA_ADMIN_API_KEY
+    ALGOLIA_INDEX_NAME=specs
     ```
 3.  依存関係をインストールします: `pnpm install`
 4.  開発サーバーを起動します: `pnpm run dev`
@@ -215,3 +257,32 @@ curl -X POST \
 | CORS対策 | Next.jsミドルウェアによるCORS対策 | ✅ 完了 |
 
 残タスクが発生した場合は `TODO.md` を更新してください。
+
+## トラブルシューティング
+
+### 一般的な問題
+
+1. **Cloud Run環境変数の問題**:
+   - Secret Managerのシークレットが正しく設定されているか確認してください
+   - Cloud Runサービスの環境変数設定で重複がないことを確認してください
+
+2. **Firebase Admin SDK初期化エラー**:
+   - `Service account object must contain a string "private_key" property`エラーの場合、`FIREBASE_ADMIN_KEY`シークレットが正しく設定されているか、または正しく渡されているか確認してください
+   - シークレットはJSON形式の文字列全体である必要があります
+
+3. **Algolia環境変数エラー**:
+   - 全文検索機能を使用しない場合、警告メッセージは無視できます
+   - 使用する場合は、すべてのAlgolia環境変数（`NEXT_PUBLIC_ALGOLIA_APP_ID`, `NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY`, `ALGOLIA_ADMIN_API_KEY`, `ALGOLIA_INDEX_NAME`）が設定されていることを確認してください
+
+### 修正スクリプト
+
+環境変数の問題を修正するためのヘルパースクリプト`fix_environment_issues.sh`が用意されています。このスクリプトは以下の操作を行います：
+
+1. Firebase Admin SDKのサービスアカウントキーを再作成
+2. Algolia環境変数の設定（オプション）
+3. Cloud Runサービスの環境変数の競合解決
+
+問題が発生した場合はこのスクリプトを実行してください：
+```bash
+./fix_environment_issues.sh
+```
