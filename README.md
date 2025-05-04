@@ -13,7 +13,7 @@ Google Cloud Platform (GCP) と Firebase を活用して構築・デプロイさ
 - **外部連携**:
   - **Google Drive API** – 仕様書のDrive保存・共有機能
   - **Gmail API** – 仕様書のメール送信機能
-  - Firebase OAuth 2.0による権限委譲
+  - Firebase OAuth 2.0による権限委譲で安全に外部サービスにアクセス
 - **CI/CD**:
   - GitHub Actions → Cloud Build → Cloud Run
   - イメージは Artifact Registry へ push
@@ -208,9 +208,10 @@ curl -X POST \
 | Drive連携 | /api/drive-uploadエンドポイント | ✅ 完了 |
 | Drive連携 | 公開/非公開共有切り替え機能 | ✅ 完了 |
 | Gmail連携 | Gmail API有効化 | ✅ 完了 |
-| Gmail連携 | Firebase認証によるGoogle認証連携 | 🔄 進行中 |
-| Gmail連携 | /api/gmail-sendエンドポイント | 🔄 進行中 |
-| Gmail連携 | フロントエンド送信ページ実装 | 🔄 進行中 |
+| Gmail連携 | Firebase認証によるGoogle認証連携 | ✅ 完了 |
+| Gmail連携 | /api/gmail-sendエンドポイント | ✅ 完了 |
+| Gmail連携 | フロントエンド送信ページ実装 | ✅ 完了 |
 | Gmail連携 | EmailButtonコンポーネント | ✅ 完了 |
+| CORS対策 | Next.jsミドルウェアによるCORS対策 | ✅ 完了 |
 
 残タスクが発生した場合は `TODO.md` を更新してください。
