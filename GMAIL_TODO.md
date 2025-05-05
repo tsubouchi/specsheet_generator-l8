@@ -31,7 +31,7 @@
 3. Firebase プロジェクト設定の確認
    ```javascript
    const firebaseConfig = {
-     apiKey: "AIzaSyCmbs5ZI8CxRunlBsAqjDKrPOiJLmrsDJM",
+     apiKey: "<YOUR_FIREBASE_API_KEY>",
      authDomain: "specsheet-generator.firebaseapp.com",
      projectId: "specsheet-generator",
      storageBucket: "specsheet-generator.firebasestorage.app",

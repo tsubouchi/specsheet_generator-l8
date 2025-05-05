@@ -47,8 +47,7 @@ firestore-debug.log
 ui-debug.log
 firebase-mcp/
 
-# Docker関連
-Dockerfile
+# Docker関連（Dockerfile はビルドに必要なので除外しない）
 .dockerignore
 docker-compose*
 

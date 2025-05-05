@@ -168,7 +168,7 @@ gcloud secrets create GOOGLE_GENERATIVE_AI_API_KEY \
 
 # 値の設定（実際の値に置き換える）
 # 注意: 以下のキーは例示用です。本番環境では実際のキーを使用してください
-echo -n "AIzaSyCmbs5ZI8CxRunlBsAqjDKrPOiJLmrsDJM" | \
+echo -n "<YOUR_FIREBASE_API_KEY>" | \
   gcloud secrets versions add GOOGLE_GENERATIVE_AI_API_KEY --data-file=-
 
 # Firebase設定
@@ -185,7 +185,7 @@ do
 done
 
 # 例: Firebase API Keyの登録（注意: これは例示用です）
-echo -n "AIzaSyCmbs5ZI8CxRunlBsAqjDKrPOiJLmrsDJM" | \
+echo -n "<YOUR_FIREBASE_API_KEY>" | \
   gcloud secrets versions add NEXT_PUBLIC_FIREBASE_API_KEY --data-file=-
 
 # 例: Firebaseプロジェクト設定
@@ -238,7 +238,7 @@ rm firebase-admin-key.json
 # .env.productionファイルを作成
 cat > .env.production << 'EOF'
 # Firebase設定
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCmbs5ZI8CxRunlBsAqjDKrPOiJLmrsDJM
+NEXT_PUBLIC_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=specsheet-generator.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=specsheet-generator
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=specsheet-generator.firebasestorage.app
@@ -339,7 +339,7 @@ steps:
       - '-c'
       - |
         cat > .env.production << 'EOF'
-        NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY
+        NEXT_PUBLIC_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
         NEXT_PUBLIC_FIREBASE_PROJECT_ID=$$NEXT_PUBLIC_FIREBASE_PROJECT_ID
         NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
@@ -670,7 +670,7 @@ node firebase-admin-test.js
 | 問題 | 原因 | 解決策 |
 |------|------|-------|
 | `Service account object must contain a string "private_key" property` | Firebase Admin SDKの初期化に必要な鍵が不足 | サービスアカウント作成と`FIREBASE_ADMIN_KEY`シークレットの設定 |
-| `FirebaseError: Firebase: Error (auth/invalid-api-key)` | クライアント側の初期化で無効なAPIキー | Secret Managerに正しいAPIキーを設定し、ビルド時に環境変数として渡す |
+| `Firebase: Error (auth/invalid-api-key)` | クライアント側の初期化で無効なAPIキー | Secret Managerに正しいAPIキーを設定し、ビルド時に環境変数として渡す |
 | `Algolia 環境変数が未設定です。全文検索は無効化されます。` | Algolia設定が不足 | Algolia関連の環境変数をSecret Managerに追加し、cloudbuild.yamlを更新 |
 
 ### 14.3 改善された設定
@@ -683,7 +683,7 @@ steps:
     args: [
       'build', 
       '-t', 'asia-northeast1-docker.pkg.dev/specsheet-generator/specsheet-docker/specsheet-generator:latest', 
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY',
+      '--build-arg', 'NEXT_PUBLIC_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>',
       '--build-arg', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
       '--build-arg', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=$$NEXT_PUBLIC_FIREBASE_PROJECT_ID',
       '--build-arg', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
@@ -720,14 +720,27 @@ steps:
   ```bash
   gcloud builds submit --config=cloudbuild.yaml .
   ```
-- [ ] デプロイ後のサービス動作確認
+- [ ] Secret Manager に Firebase / Algolia / Generative AI のシークレットを登録
   ```bash
-  gcloud run services describe specsheet-generator --region=asia-northeast1
+  # 例 : Firebase API Key
+  gcloud secrets create NEXT_PUBLIC_FIREBASE_API_KEY --replication-policy="automatic" || true
+  echo -n "<YOUR_FIREBASE_API_KEY>" | gcloud secrets versions add NEXT_PUBLIC_FIREBASE_API_KEY --data-file=-
+  # 他のキーも同様に追加
   ```
-- [ ] サービスのログ確認とエラー対応
+
+- [ ] Cloud Build / Cloud Run サービスアカウントへ `roles/secretmanager.secretAccessor` を付与
   ```bash
-  gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=specsheet-generator" --limit=10
+  RUN_SA="frontend-sa@$PROJECT_ID.iam.gserviceaccount.com"
+  CB_SA="service-$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+  for SA in $RUN_SA $CB_SA; do
+    gcloud secrets add-iam-policy-binding NEXT_PUBLIC_FIREBASE_API_KEY \
+      --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
+  done
   ```
+
+- [ ] cloudbuild.yaml の `availableSecrets:` と `secretEnv:` の整合性チェック
+
+- [ ] Cloud Run デプロイ時 `--set-secrets` / `--set-env-vars` が正しく参照することを確認
 
 ### 15.2 優先度：中
 
